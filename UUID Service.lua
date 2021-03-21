@@ -11,8 +11,8 @@
 	Notes:
 		-Might Take a sec or two to start up 
 			if NOT _G.uuidTable == NIL then you are good to go
-		-I have no idea if this crosses the client/server boundry, it should, I think.
-		-This remembers EVERY UUID CREATED IN THE SERVER
+		-This does NOT CROSS the client/server boundry
+		-This remembers EVERY UUID CREATED IN THE Game
 			I do not know if that is a problem for a server that runs for a week
 	~DrWhoInTARDIS
 ]]
@@ -97,4 +97,4 @@ _G.uuidTable = uuidTable
 
 repeat
 	print(_G.uuidTable.size())
-until not wait(30)
+until not wait(60*1)
