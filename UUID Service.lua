@@ -22,9 +22,8 @@ random = math.random
 
 function uuid() --function from https://gist.github.com/jrus/3197011
 	local template ='xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
-	return string.gsub(template, '[x]', function (c)
-		local v = random(0, 0xf)
-		return string.format('%x', v)
+	return string.gsub(template, 'x', function ()
+		return utf8.char(random(0,127))
 	end)
 end
 
@@ -41,7 +40,7 @@ uuidTable = {
 		end,
 		sub = function(self,n) 
 			self.Insts = self.Insts - n
-		end,
+		end
 	}
 }
 setmetatable(uuidTable.size, {
