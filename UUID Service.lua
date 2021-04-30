@@ -21,8 +21,7 @@ math.randomseed(os.clock())
 random = math.random
 
 function uuid() --function from https://gist.github.com/jrus/3197011
-	local template ='xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
-	return string.gsub(template, 'x', function ()
+	return string.gsub('xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', 'x', function ()
 		return utf8.char(random(0,127))
 	end)
 end
