@@ -1,11 +1,10 @@
 --[[
 	Description:
-		Creates a UUID for all instances and is guaranteed 
-			to never be the same in the same server.
+		Creates a UUID for all instances and is guaranteed to never be the same in the same server.
 		The uuid string will never be deleted but the inst referance to it can be.
 	Useage:
 		_G.uuidTable[inst] 
-			- returns a string uuid or nil if not found or inst was destroyed
+			- returns a string uuid, nil if not found, or nil inst was destroyed
 		_G.uuidTable[string uuid]
 			- returns inst, string "null" if inst was Destroyed, or nil if uuid was never created
 	Notes:
@@ -31,11 +30,8 @@ uuidTable = {
 		["Insts"] = 0,
 		["IDs"] = 0,
 		add = function(self,n) 
-			for k,v in pairs(self) do 
-				if type(v) == type(1) then
-					self[k] = self[k] + n
-				end
-			end
+			self.Insts = self.Insts + n
+			self.IDs = self.IDs + n
 		end,
 		sub = function(self,n) 
 			self.Insts = self.Insts - n
