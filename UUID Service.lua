@@ -3,12 +3,12 @@
 		Creates a UUID for all instances and is guaranteed to never be the same in the same server.
 		The uuid string will never be deleted but the inst referance to it can be.
 	Useage:
-		_G.uuidTable[inst] 
+		_G.uuidTable[inst]
 			- returns a string uuid, nil if not found, or nil inst was destroyed
 		_G.uuidTable[string uuid]
 			- returns inst, string "null" if inst was Destroyed, or nil if uuid was never created
 	Notes:
-		-Might Take a sec or two to start up 
+		-Might Take a sec or two to start up
 			if NOT _G.uuidTable == NIL then you are good to go
 		-This does NOT CROSS the client/server boundry
 		-This remembers EVERY UUID CREATED IN THE Game
@@ -16,6 +16,7 @@
 	~DrWhoInTARDIS
 ]]
 
+local p = "UUID Service:"
 math.randomseed(os.clock())
 random = math.random
 
@@ -29,11 +30,11 @@ uuidTable = {
 	size = {
 		["Insts"] = 0,
 		["IDs"] = 0,
-		add = function(self,n) 
+		add = function(self,n)
 			self.Insts = self.Insts + n
 			self.IDs = self.IDs + n
 		end,
-		sub = function(self,n) 
+		sub = function(self,n)
 			self.Insts = self.Insts - n
 		end
 	}
@@ -42,23 +43,23 @@ setmetatable(uuidTable.size, {
 	__call = function(t)
 		local total = 0
 		local outString = ""
-		for k,v in pairs(t) do 
+		for k,v in pairs(t) do
 			if type(v)==type(1) then
 				outString = outString .. " #" .. tostring(k) .. ": " .. tostring(v)
 				total = total + v
 			end
 		end
-		return "UUID: Size: " .. tostring(total) .. outString
+		return p .. " Size: " .. tostring(total) .. outString
 	end
 })
-function putUUID(thing) 
+function putUUID(thing)
 	local myUUID = uuid()
 
 	if not uuidTable[myUUID] == nil then
-		print("ERROR generating ID!!!! Same UUID as generated!", myUUID)
+		print(p,"ERROR generating ID!!!! Same UUID as generated!", myUUID)
 		putUUID(thing)
-	elseif not uuidTable[thing] == nil then 
-		print("ERROR giving UUID!!! Already has UUID!", thing:GetFullName())
+	elseif not uuidTable[thing] == nil then
+		print(p,"ERROR given UUID!!! Already has UUID!", thing:GetFullName())
 	else
 		uuidTable[myUUID] = thing
 		uuidTable[thing] = myUUID
@@ -73,15 +74,15 @@ end
 
 game.DescendantAdded:Connect(function(des)
 	local good, message = pcall(putUUID,des)
-	--if not good then print(message)end	
+	--if not good then print(message)end
 end)
 game.DescendantRemoving:Connect(function(des)
 	local found = uuidTable[des]
-	if found == nil then 
-		print("ERROR Removing ID!!! Could not find UUID for",des:GetFullName())
+	if found == nil then
+		--warn(p,"ERROR Removing ID!!! Could not find UUID for",pcall(function()return des:GetFullName()end))
 	else
 		--print("removing",des:GetFullName(),found)
-		uuidTable[found] = "null"
+		uuidTable[found] = ""
 		uuidTable[des] = nil
 		uuidTable.size:sub(1)
 	end
@@ -91,4 +92,4 @@ _G.uuidTable = uuidTable
 
 repeat
 	print(_G.uuidTable.size())
-until not wait(60*1)
+until not wait(60*2)
