@@ -1,14 +1,11 @@
 local RunService = game:GetService("RunService")
 local TestService = game:GetService("TestService")
 local Rando = Random.new()
-local Teams = game:GetService("Teams")
-local Players = game:GetService("Players")
-
---Shared Library
---Note: This can not require Marvin or GLaDOS or else the code will go in circles!
+local p = "Mainframe:"
 
 local module = {}
 local m = module
+
 
 --use like print()
 function module.throw(...)
@@ -65,8 +62,8 @@ end
 
 
 function module.DisplayRay(start :Vector3, stop :Vector3, distance :number?, life :number?) --https://devforum.roblox.com/t/how-do-you-visualize-a-raycast-as-a-part/657972/5
-    local distance = distance or (start-stop).Magnitude
-    local life = life or 0.2
+    distance = distance or (start-stop).Magnitude
+    life = life or 0.2
     local p = Instance.new("Part")
     p.Anchored = true
     p.CanCollide = false
@@ -195,44 +192,85 @@ function  module.tableDeserialize(myTable)
 end
 
 
---expects pure number array. Unknown for any other type.
--- {[1] = "chad", [5] = "Hi", [3] = "E"} to {[1] = "chad", [2] = "Hi", [3] = "E"} results MAY be ranomized depending on data
--- or if keeporder is true: {[1] = "chad", [2] = "E", [3] = "Hi"}
-function module.tableShrink(myTable, keepOrder)
-	local tempTable = {}
-	local i = 1
-	if keepOrder then
-		local nonNumbers = {}
-		for k,v in pairs(myTable) do
-			if type(k) ~= "number" then
-				nonNumbers[k] = v
-			else
-				tempTable[i] = {k,v}
-				i=i+1
+--shrinks the number portion of a table to an array
+--keeps the non number keys
+--results may be randomized if keepOrder ~= true
+function module.tableShrink(myTable, keepOrder :boolean)
+	local shrunk = {}
+	local numbs :{{k:number,v:any}} = {}
+	for k,v in pairs(myTable) do
+		if type(k)=="number" then
+			if keepOrder
+			then table.insert(numbs,{k=k,v=v})
+			else table.insert(shrunk,v)
 			end
+		else
+			shrunk[k] = v
 		end
-		table.sort(tempTable,function(a,b) return a[1] < b[1] end)
-		table.foreachi(tempTable,function(k,v) tempTable[k] = v[2] end)
-		table.foreach(nonNumbers,function(k,v) tempTable[k] = v end)
+	end
+	table.sort(numbs, function(a,b) return a.k < b.k end)
+	for newSpot,original in ipairs(numbs) do
+		shrunk[newSpot] = original.v
+	end
+	return shrunk
+end
+
+
+--modify is optional. if use: return key,value
+function module.tableCopy(t :table, keepMeta :boolean?, modify :((t :table, k :any, v :any, copy :table) -> (any,any))) :table
+	local tempTable = {}
+	if modify then
+		for k,v in pairs(t) do
+			k,v = modify(t,k,v,tempTable)
+			if k==nil or v==nil then continue end
+			tempTable[k] = v
+		end
 	else
-		for k,v in pairs(myTable) do
-			tempTable[i] = v
-			i=i+1
+		for k,v in pairs(t) do
+			tempTable[k] = v
 		end
+	end
+
+	if keepMeta then
+		setmetatable(tempTable, getmetatable(t))
 	end
 	return tempTable
 end
 
 
-function module.tableCopy(myTable :table, keepMeta :boolean?)
-	local tempTable = {}
+function module.tableGetRandomElement(myTable :table) :(any, any)
+	local count = module.tableCount(myTable)
+	local stopOn = Rando:NextInteger(1,count)
+	local i = 0
 	for k,v in pairs(myTable) do
-		tempTable[k] = v
+		i +=1
+		if i == stopOn then
+			return k,v
+		end
 	end
-	if keepMeta then
-		setmetatable(tempTable, getmetatable(myTable))
+end
+
+
+function module.tableConcat(myTable :table, sep :string?, start :number?, stop :number?) :string
+	local out = ""
+	sep = sep or ""
+	start, stop = start or 1, stop or #myTable
+	for i = start, stop do
+		out ..= tostring(myTable[i])
+		if i~=stop then
+			out ..= sep
+		end
 	end
-	return tempTable
+	return out
+end
+
+
+function module.tableBisect(myTable :Array<any>, start :number, stop :number?) :Array<any>
+	local out = {}
+	for i = start, stop or #myTable do
+		table.insert(out,myTable[i])
+	end
+	return out
 end
 
 
@@ -276,14 +314,18 @@ function module.tableReverse(myTable :Array<any>) :Array<any>
 end
 
 
-function module.tableFind(myTable,search)
+---@return boolean found
+---@return any key
+---@return any value
+function module.tableFind(myTable :table, search)
 	for k,v in pairs(myTable) do
-		if v == search then return k end
+		if v==search then return true,k,v end
 	end
+	return false
 end
 
 
-function module.tableCount(myTable) :number
+function module.tableCount(myTable :table) :number
 	local i = 0
 	for k,v in pairs(myTable) do
 		i+=1
@@ -292,42 +334,91 @@ function module.tableCount(myTable) :number
 end
 
 
--- args must be tables
-function module.tableAppend(myTable,... :table)
+--may overwrites keys in orginal table
+function module.tableAppend(myTable, ... :table)
 	for _,toAdd in pairs({...}) do
 		for k,v in pairs(toAdd) do
 			myTable[k]=v
 		end
 	end
-	return myTable --if you want to use it
+	return myTable
+end
+
+--tacks args on the end
+function module.tableInsert(myTable, ...)
+	for _,v in pairs({...}) do
+		table.insert(myTable,v)
+	end
+	return myTable
 end
 
 
-function module.tableForPairs(t, callback :(table,any,any) -> ()) :table
+function module.tableForPairs(t, callback :(t :table, k :any, v :any) -> ()) :table
 	for k,v in pairs(t) do callback(t,k,v) end
 	return t
 end
 
 
-function module.isSameTable(tab1,tab2) :boolean
+--creates new table with same keys* and new values
+function module.tableMap(t, callback :(v :any) -> (any))
+	local out = {}
+	for k,v in pairs(t) do
+		out[k] = callback(v)
+	end
+	return out
+end
+
+
+--new table with true filter returns. Doesn't modify k/v
+function module.tableFilter(t, filter :(t :{any}, k :any, v :any)->(boolean))
+	local tempTable = {}
+	for k,v in pairs(t) do
+		if filter(t,k,v) then
+			tempTable[k] = v
+		end
+	end
+	return tempTable
+end
+
+
+--new shrunk array with true filter returns. Doesn't modify v
+function module.arrayFilter(t, filter :(t :{any}, k :any, v :any)->(boolean))
+	local tempTable = {}
+	for k,v in ipairs(t) do
+		if filter(t,k,v) then
+			table.insert(tempTable,v)
+		end
+	end
+	return tempTable
+end
+
+
+function module.arrayRemoveDupes(t)
+	local values = {}
+	local tempTable = {}
+	for k,v in ipairs(t) do
+		if values[v] then continue end
+		values[v] = k
+		table.insert(tempTable,v)
+	end
+	return tempTable
+end
+
+
+function module.isSameTable(tab1 :table?, tab2 :table?) :boolean
 	if type(tab1) ~= "table" or type(tab2)~="table" then return false end
 	if tab1==tab2 then return true end
-	local temp1, temp2 = module.tableCopy(tab1), module.tableCopy(tab2)
-	for k,v in pairs(temp1) do
-		--print("Table1",temp1,k,v,"Table2",temp2,temp2[k],module.isSameTable(v,temp2[k]))
-		if temp2[k] == v or module.isSameTable(v,temp2[k]) then
-			temp2[k] = nil
-			temp1[k] = nil
+	for k,v in pairs(tab1) do
+		if tab2[k] ~= v and not module.isSameTable(v,tab2[k]) then
+			return false
 		end
 	end
-	for k,v in pairs(temp2) do
-		--print("Table2",temp1,k,v,"Table1",temp2,temp2[k],module.isSameTable(v,temp2[k]))
-		if temp1[k] == v or module.isSameTable(v,temp1[k]) then
-			temp1[k] = nil
-			temp2[k] = nil
+	for k,v in pairs(tab2) do
+		if tab1[k] ~= v and not module.isSameTable(v,tab1[k]) then
+			return false
 		end
 	end
-	return module.tableCount(temp1)==0 and module.tableCount(temp2)==0
+	return true
 end
 
 
@@ -339,17 +430,143 @@ function module.tobool(value) :boolean?
 end
 
 
---http://lua-users.org/wiki/SimpleRound
+--(v >= 0 and 1) or -1
 function module.sign(v)
 	return (v >= 0 and 1) or -1
 end
+--http://lua-users.org/wiki/SimpleRound
 function module.round(v, bracket) -- (5.6, 7) -> 7
 	bracket = bracket or 1
 	return math.floor(v/bracket + module.sign(v) * 0.5) * bracket
 end
 
+function module.sameSign(ignore0 :boolean,... :number)
+	local args = {...}
+	local firstSign = m.sign(args[1])
+	for i=2,#args do
+		if ignore0 and args[i]==0 then continue end
+		if firstSign ~= m.sign(args[i]) then
+			return false
+		end
+	end
+	return true
+end
 
-function module.waitForChildren(waitTime :number?, parent :Instance, ...) :(boolean,string)
+
+--for use in a box with ancorpoint .5,.5 remember to y = -y
+function module.pointOnCircle(radius :number, degrees :number) :Vector2
+	local angle = math.rad(degrees)
+	return Vector2.new(radius*math.sin(angle), radius*math.cos(angle))
+end
+
+
+function module.midpoint(x1,y1,x2,y2) :(number,number)
+	return (x1+x2)/2, (y1+y2)/2
+end
+
+
+function module.gmatches(s :string, pattern :string) :{string}
+	local matches = {}
+	for match in string.gmatch(s, pattern) do
+		table.insert(matches,match)
+	end
+	return matches
+end
+
+
+local tomt = {__index = {tostring = tostring; tonumber = tonumber}}
+module.string = setmetatable({
+	toUDim = function(s :string)
+		local matches = module.gmatches(s,"%d+")
+		return if #matches==2 then UDim.new(unpack(matches)) else nil
+	end;
+	toUDim2 = function(s :string)
+		local matches = module.gmatches(s,"%d+")
+		return if #matches==4 then UDim2.new(unpack(matches)) else nil
+	end;
+	toVector2 = function(s :string)
+		local matches = module.gmatches(s,"%d+")
+		return if #matches==2 then Vector2.new(unpack(matches)) else nil
+	end;
+	toVector3 = function(s :string)
+		local matches = module.gmatches(s,"%d+")
+		return if #matches==3 then Vector3.new(unpack(matches)) else nil
+	end;
+},tomt)
+module.UDim2 = setmetatable({
+	toVector2 = function(u :UDim2)
+		return Vector2.new(u.X.Offset,u.Y.Offset)
+	end;
+	toVector3 = function(u :UDim2)
+		return Vector3.new(u.X.Offset,u.Y.Offset)
+	end;
+},tomt)
+module.Vector2 = setmetatable({
+	toUDim2 = function(v :Vector2, xScale :number?, yScale :number?)
+		return UDim2.new(xScale, v.X, yScale, v.Y)
+	end;
+	toVector3 = function(v: Vector2)
+		return Vector3.new(v.X,v.Y,0)
+	end
+},tomt)
+module.Vector3 = setmetatable({
+	toUDim2 = function(v :Vector3, xScale :number?, yScale :number?)
+		return UDim2.new(xScale, v.X, yScale, v.Y)
+	end;
+	toVector2 = function(v: Vector3)
+		return Vector2.new(v.X,v.Y)
+	end
+},tomt)
+
+
+function module.vector2Directions(origin :Vector2?, destination :Vector2?, UDimLogic :boolean?)
+	origin = origin or Vector2.new()
+	destination = destination or Vector2.new()
+	local dirs = {
+		Left = origin.X > destination.X;
+		Right = origin.X < destination.X;
+		Top = origin.Y < destination.Y;
+		Bottom = origin.Y > destination.Y;
+	}
+	if UDimLogic then
+		if dirs.Top then
+			dirs.Bottom = true
+			dirs.Top = false
+		elseif dirs.Bottom then
+			dirs.Bottom = false
+			dirs.Top = true
+		end
+	end
+	dirs.Up = dirs.Top
+	dirs.Down = dirs.Bottom
+	return dirs
+end
+
+
+function module.regionRandomPoint(v1 :Vector3, v2 :Vector3)
+	return Vector3.new(Rando:NextNumber(v1.X,v2.X),Rando:NextNumber(v1.Y,v2.Y),Rando:NextNumber(v1.Z,v2.Z))
+end
+
+
+---+,+ is top,left. -,- is bottom,right.
+---@return boolean isOnScreen
+---@return Vector2 correctionNeeded add to offset to correct position
+function module.isGuiObjectInScreen(thing :GuiObject, overridePos :Vector2?, overrideSize :Vector2?)
+	local screenGui :ScreenGui = thing:FindFirstAncestorWhichIsA("ScreenGui")
+	if not screenGui then error("Object needs to be decendant of a ScreenGui",2) end
+	local screenSize = screenGui.AbsoluteSize
+	local x,y = 0,0
+	local topLeft = overridePos or thing.AbsolutePosition
+	local bottomRight = topLeft + (overrideSize or thing.AbsoluteSize)
+	if topLeft.X < 0 then x = -topLeft.X end
+	if topLeft.Y < 0 then y = -topLeft.Y end
+	if bottomRight.X > screenSize.X then x = -(bottomRight.X - screenSize.X) end
+	if bottomRight.Y > screenSize.Y then y = -(bottomRight.Y - screenSize.Y) end
+	return x==0 and y==0, Vector2.new(x,y)
+end
+
+
+function module.waitForChildren(waitTime :number?, parent :Instance, ... :string) :(boolean,string)
 	local output, good, total = "Missing:",true,0
 	for _,child in ipairs({...}) do
 		total +=1
@@ -366,14 +583,14 @@ function module.waitForChildren(waitTime :number?, parent :Instance, ...) :(bool
 end
 
 
-function  module.waitForNested(waitTime :number?, parent :Instance, child :string, ...) :Instance?
+function module.waitForNested(waitTime :number?, parent :Instance, child :string, ... :string) :Instance?
 	if not (parent and child) then return parent end
 	return module.waitForNested(waitTime,parent:WaitForChild(child,waitTime),...)
 end
 
 
 -- children are expected to be like: {parent , child} so func(parent,child,{child to become parent, child ,child})
-function module.waitForNestedChildren(waitTime :number?, parent :Instance, ...) :(boolean,string)
+function module.waitForNestedChildren(waitTime :number?, parent :Instance, ... :string) :(boolean,string)
 	local args = {...}
 	local deep = {}
 	for k,child in ipairs(args) do
@@ -401,17 +618,22 @@ function module.waitForNestedChildren(waitTime :number?, parent :Instance, ...) 
 end
 
 
-function module.hasNested(parent, ...) :(boolean,any)
-	return pcall(function(...)
+function module.hasNested(parent, ...:string) :(boolean,any)
+	local good, result = pcall(function(...)
 		for _, childName in pairs({...}) do
 			parent = parent[childName]
 		end
 		return parent
 	end, ...)
+	if type(parent)=="table" and good and result==nil then --tables don't error on nil members so we need to force a no
+		return false
+	else
+		return good, result
+	end
 end
 
 
-function module.hasChildren(parent, ...) :(boolean,string)
+function module.hasChildren(parent, ...:string) :(boolean,string)
 	local good, missing = true, "Missing:"
 	pcall(function(...)
 		for _, childName in pairs({...}) do
@@ -455,20 +677,71 @@ function module.hasNestedChildren(parent, ...) :(boolean,string)
 end
 
 
-function module.getLevelsToParent(myThing :Instance, parent :Instance, level) :number
-	assert(level or myThing:IsDescendantOf(parent), myThing:GetFullName() .. " is not descendant of " .. parent:GetFullName())
-	level = level or 1
-	if myThing.Parent == parent then return level end
-	return module.getLevelsToParent(myThing.Parent,parent,level+1)
+--sorted by closest ancestor first
+function module.getAncestors(thing :Instance) :Array<Instance>
+	local ancestors, parent = {}, thing.Parent
+	while parent do
+		table.insert(ancestors, parent)
+		parent = parent.Parent
+	end
+	return ancestors
 end
 
 
-function module.ascendToChildOfParent(myThing :Instance, parent :Instance, stopLevelsAwayFromParent, level)
-	if not myThing.Parent then error(myThing:GetFullName() .. " is not descendant of " .. parent:GetFullName()) end
-	stopLevelsAwayFromParent = stopLevelsAwayFromParent or 1
-	level = level or module.getLevelsToParent(myThing,parent)
-	if level == stopLevelsAwayFromParent or myThing.Parent == parent then return myThing end
-	return module.ascendToChildOfParent(myThing.Parent,parent,stopLevelsAwayFromParent,level-1)
+function module.getLevelsToAncestor(myThing :Instance, ancestor :Instance) :(number, Array<Instance>)
+	assert(myThing:IsDescendantOf(ancestor), myThing:GetFullName().." is not descendant of "..ancestor:GetFullName())
+	local ancestors = module.getAncestors(myThing)
+	local level = module.tableFlip(ancestors)[ancestor]
+	local cutAncestors = {}
+	for i=1, level do
+		table.insert(cutAncestors, ancestors[i])
+	end
+	return level, cutAncestors
+end
+
+
+-- a.b.c.d.e.f;  (f,a,1) -> b; (f,a,3) -> d
+function module.ascendToChildOfAncestor(myThing :Instance, ancestor :Instance, stopLevelsAwayFromAncestor :number?) :Instance
+	if not myThing.Parent then error(myThing:GetFullName() .. " is not descendant of " .. ancestor:GetFullName()) end
+	stopLevelsAwayFromAncestor = stopLevelsAwayFromAncestor or 1
+	local newLevel = module.getLevelsToAncestor(myThing, ancestor) - stopLevelsAwayFromAncestor
+	if newLevel < 1 then
+		--requested to stop lower than we already are, (a,b,4) b is 1 away, not 4
+		--I'm tempted to raise an error because you prolly didn't intend for this
+		--for now, warn and return what we have
+		--warn(p,"ascendToChildOfAncestor: requested to stop lower than we already are")
+		return myThing
+	end
+	return module.getAncestors(myThing)[newLevel]
+end
+
+
+function module.isColliding(thing :Folder|Model)
+	local parts :{BasePart} = m.arrayFilter(thing:GetDescendants(),function(t, k, v)
+		return v:IsA("BasePart")
+	end)
+	return workspace:ArePartsTouchingOthers(parts, -0.1)
+end
+
+
+function module.getColliding(thing :Folder|Model) :{BasePart}
+	local parts :{BasePart} = m.arrayFilter(thing:GetDescendants(),function(t, k, v)
+		return v:IsA("BasePart")
+	end)
+	local parms = OverlapParams.new()
+	parms.FilterType = Enum.RaycastFilterType.Blacklist
+	parms.FilterDescendantsInstances = {thing}
+	local collisions = {}
+	local i = 0
+	for _,part in ipairs(parts) do
+		task.spawn(function() i+=1
+			for _,hit in ipairs(workspace:GetPartsInPart(part,parms)) do
+				table.insert(collisions,hit)
+			end i-=1
+		end)
+	end
+	while i~=0 do wait() end
+	return m.arrayRemoveDupes(collisions)
 end
 
 
