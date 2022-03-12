@@ -1,11 +1,14 @@
 local RunService = game:GetService("RunService")
 local TestService = game:GetService("TestService")
+local GuiService = game:GetService("GuiService")
+local Teams = game:GetService("Teams")
+local Players = game:GetService("Players")
+local Types = require(script.Parent.Types)
 local Rando = Random.new()
 local p = "Mainframe:"
 
 local module = {}
 local m = module
-
 
 --use like print()
 function module.throw(...)
@@ -166,7 +169,7 @@ function module.tprint(tbl :table, indent) :string
 end
 
 
-function  module.tableSerialize(myTable)
+function module.tableSerialize(myTable)
 	local tempTable = {}
 	local i =1
 	for k,v in pairs(myTable) do
@@ -180,7 +183,7 @@ function  module.tableSerialize(myTable)
 end
 
 
-function  module.tableDeserialize(myTable)
+function module.tableDeserialize(myTable)
 	local tempTable = {}
 	for _,t in pairs(myTable) do
 		if type(t[2]) == "table" then
@@ -251,11 +254,26 @@ function module.tableGetRandomElement(myTable :table) :(any, any)
 end
 
 
-function module.tableConcat(myTable :table, sep :string?, start :number?, stop :number?) :string
+function module.tableShuffle(myTable :{})
+	local shuffled, values = {}, {}
+	for _,v in pairs(myTable) do
+		table.insert(values,v)
+	end
+	for k in pairs(myTable) do
+		local vn,newValue = module.tableGetRandomElement(values)
+		shuffled[k] = newValue
+		values[vn] = nil
+	end
+	return shuffled
+end
+
+
+--table.concat only works for num/string so use this
+--rename to array concat sometime
+function module.tableConcat(myTable :Array<any>, sep :string?, start :number?, stop :number?) :string
 	local out = ""
 	sep = sep or ""
-	start, stop = start or 1, stop or #myTable
-	for i = start, stop do
+	for i = start or 1, stop or #myTable do
 		out ..= tostring(myTable[i])
 		if i~=stop then
 			out ..= sep
@@ -360,6 +378,7 @@ end
 
 
 --creates new table with same keys* and new values
+--*if return is nil then no key obv
 function module.tableMap(t, callback :(v :any) -> (any))
 	local out = {}
 	for k,v in pairs(t) do
@@ -405,6 +424,14 @@ function module.arrayRemoveDupes(t)
 end
 
 
+function module.arrayAppendArray(t, toAppend)
+	for _,v in ipairs(toAppend) do
+		t[#t+1] = v
+	end
+	return t
+end
+
+
 function module.isSameTable(tab1 :table?, tab2 :table?) :boolean
 	if type(tab1) ~= "table" or type(tab2)~="table" then return false end
 	if tab1==tab2 then return true end
@@ -437,7 +464,13 @@ end
 --http://lua-users.org/wiki/SimpleRound
 function module.round(v, bracket) -- (5.6, 7) -> 7
 	bracket = bracket or 1
-	return math.floor(v/bracket + module.sign(v) * 0.5) * bracket
+	local rounded = v/bracket + module.sign(v) * 0.5
+	if module.sign(v) == 1 then
+		rounded = math.floor(rounded)
+	else
+		rounded = math.ceil(rounded)
+	end
+	return rounded * bracket
 end
 
 function module.sameSign(ignore0 :boolean,... :number)
@@ -450,6 +483,19 @@ function module.sameSign(ignore0 :boolean,... :number)
 		end
 	end
 	return true
+end
+
+
+---@param start number
+---@param delta number +towards0, -awayfrom0
+---@return number
+function module.moveTo0(start, delta)
+	return start + (if start>0 then -delta else delta)
+end
+
+
+function module.isInRange(n :number, min :number, max :number)
+	return min <= n and n <= max
 end
 
 
@@ -474,8 +520,144 @@ function module.gmatches(s :string, pattern :string) :{string}
 end
 
 
-local tomt = {__index = {tostring = tostring; tonumber = tonumber}}
+module.fuzz = {
+	X = nil ::number;
+	Y = nil ::number;
+	Z = nil ::number?;
+	__type = "fuzzy";
+}
+module.fuzz.__index = module.fuzz
+function module.fuzz:Magnitude() return math.sqrt((self^2):Sum()) end
+function module.fuzz:Unit() return self/self:Magnitude() end
+function module.fuzz:Unpack() return self.X,self.Y,self.Z end
+function module.fuzz:ToVector3() return Vector3.new(self:Unpack()) end
+function module.fuzz:ToVector2() return Vector2.new(self:Unpack()) end
+function module.fuzz:ToList() return {self:Unpack()} end
+function module.fuzz:FromList(from) return module.fuzz.new3(unpack(from)) end
+function module.fuzz:ToDict() return {X=self.X,Y=self.Y,Z=self.Z} end
+function module.fuzz:FromDict(from) return module.fuzz.new3(from.X,from.Y,from.Z) end
+function module.fuzz:Sum()
+	local i = 0
+	for _,v in ipairs(self:ToList()) do i+=v end
+	return i
+end
+function module.fuzz:ClampMagnitude(n :number)
+	return if self:Magnitude() > math.abs(n) then self:Unit()*n else self
+end
+function module.fuzz:Equals(thing) return pcall(function()
+		assert(thing.X == self.X)
+		assert(thing.Y == self.Y)
+		if self.Z then assert(thing.Z == self.Z) end
+end) end
+function module.fuzz:Compatible(thing) return pcall(function()
+	assert(thing.X and thing.Y)
+	if self.Z then assert(thing.Z) end
+end) end
+function module.fuzz.isFuzzy(thing) return pcall(function()
+		assert(thing.__type == "fuzzy")
+end) end
+
+function module.fuzz:Operate(callback :(v:number, op :number)->(number), op)
+	assert(type(op)=="number" or self:Compatible(op),"Uncompatable Operand")
+	local newFuzz = self:ToDict()
+	for k,v in pairs(newFuzz) do
+		newFuzz[k] = callback(v, if type(op)=="number" then op else op[k])
+	end
+	return self:FromDict(newFuzz)
+end
+function module.fuzz:FuncOp(callback :(v:number)->(number),...)
+	local newFuzz = self:ToDict()
+	for k,v in pairs(newFuzz) do
+		newFuzz[k] = callback(v,...)
+	end
+	return self:FromDict(newFuzz)
+end
+function module.fuzz.__pow(self,toOp)
+	if not module.fuzz.isFuzzy(self) then local i=toOp; toOp=self; self=i end
+	return self:Operate(function(v,op) return v^op end, toOp)
+end
+function module.fuzz.__mod(self,toOp)
+	if not module.fuzz.isFuzzy(self) then local i=toOp; toOp=self; self=i end
+	return self:Operate(function(v,op) return v%op end, toOp)
+end
+function module.fuzz.__mul(self,toOp)
+	if not module.fuzz.isFuzzy(self) then local i=toOp; toOp=self; self=i end
+	return self:Operate(function(v,op) return v*op end, toOp)
+end
+function module.fuzz.__div(self,toOp)
+	if not module.fuzz.isFuzzy(self) then local i=toOp; toOp=self; self=i end
+	return self:Operate(function(v,op) return v/op end, toOp)
+end
+function module.fuzz.__add(self,toOp)
+	if not module.fuzz.isFuzzy(self) then local i=toOp; toOp=self; self=i end
+	return self:Operate(function(v,op) return v+op end, toOp)
+end
+function module.fuzz.__sub(self,toOp)
+	if not module.fuzz.isFuzzy(self) then local i=toOp; toOp=self; self=i end
+	return self:Operate(function(v,op) return v-op end, toOp)
+end
+function module.fuzz:__umm()
+	return self * -1
+end
+function module.fuzz:__tostring()
+	return "["..self.X..", "..self.Y..(if self.Z then ", "..self.Z else "").."]"
+end
+function module.fuzz:__eq(thing)
+	return self:Equals(thing)
+end
+
+function module.fuzz.new3FromVect(v :Vector3|Vector2)
+	return module.fuzz.new3(v.X,v.Y,v.Z)
+end
+function module.fuzz.new3(x,y,z)
+	local fuzz3 = {
+		X = x or 0;
+		Y = y or 0;
+		Z = z or 0;
+	}
+	return setmetatable(fuzz3,module.fuzz)
+end
+
+function module.fuzz.new2FromVect(v :Vector2|Vector3)
+	return module.fuzz.new2(v.X,v.Y)
+end
+function module.fuzz.new2(x,y)
+	local fuzz2 = {
+		X = x or 0;
+		Y = y or 0;
+	}
+	function fuzz2:FromList(from) return module.fuzz.new2(unpack(from)) end
+	function fuzz2:FromDict(from) return module.fuzz.new2(from.X,from.Y,from.Z) end
+	return setmetatable(fuzz2,module.fuzz)
+end
+
+export type Fuzz3 = typeof(module.fuzz.new3())
+export type Fuzz2 = typeof(module.fuzz.new2())
+
+--pitch yaw roll
+---https://math.stackexchange.com/a/1741317
+---@param point Fuzz3
+---@param rotate Fuzz3 degrees
+---@return Fuzz3
+function module.pointRotate(point, rotate)
+	rotate = module.fuzz.new3(rotate.X,rotate.Y,-rotate.Z) --Flip Z because reasions
+	rotate = rotate:FuncOp(math.rad) ::Fuzz3
+	local cos = rotate:FuncOp(math.cos)
+	local sin = rotate:FuncOp(math.sin)
+	local Ax :Fuzz3 = m.fuzz.new3(cos.Y*cos.Z, cos.X*sin.Z + sin.X*sin.Y*cos.Z, sin.X*sin.Z - cos.X*sin.Y*cos.Z)
+	local Ay :Fuzz3 = m.fuzz.new3(-cos.Y*sin.Z, cos.X*cos.Z - sin.X*sin.Y*cos.Z, sin.X*cos.Z + cos.X*sin.Y*sin.Z)
+	local Az :Fuzz3 = m.fuzz.new3(sin.Y, -sin.X*cos.Y, cos.X*cos.Y)
+	Ax *= point
+	Ay *= point
+	Az *= point
+	return module.fuzz.new3(Ax:Sum(), Ay:Sum(), Az:Sum()) --roll,yaw,pitch
+end
+
+
+
+local tomt = {__index = {tostring = tostring}}
 module.string = setmetatable({
+	tonumber = tonumber;
 	toUDim = function(s :string)
 		local matches = module.gmatches(s,"%d+")
 		return if #matches==2 then UDim.new(unpack(matches)) else nil
@@ -515,6 +697,15 @@ module.Vector3 = setmetatable({
 	end;
 	toVector2 = function(v: Vector3)
 		return Vector2.new(v.X,v.Y)
+	end
+},tomt)
+module.CFrame = setmetatable({
+	toDisplayString = function(cf :CFrame, rounding :number?) --rotation is in deg
+		local P = m.fuzz.new3FromVect(cf.Position)
+		local R = m.fuzz.new3(cf:ToEulerAnglesXYZ())
+		P = P:FuncOp(m.round,rounding)
+		R = R:FuncOp(math.deg):FuncOp(m.round,rounding)
+		return "P:"..P:__tostring().."\tR:"..R:__tostring()
 	end
 },tomt)
 
@@ -713,6 +904,15 @@ function module.ascendToChildOfAncestor(myThing :Instance, ancestor :Instance, s
 		return myThing
 	end
 	return module.getAncestors(myThing)[newLevel]
+end
+
+
+-- the idea is to determine basic game objects
+-- : Asteroid, Base, Ship
+function module.whatIsThis(thing :Instance) :(string?, Instance)
+	if thing:IsDescendantOf(workspace.Asteroids) then return "Asteroid",module.ascendToChildOfAncestor(thing,workspace.Asteroids) end
+	if thing:IsDescendantOf(workspace.Bases) then return "Base", module.ascendToChildOfAncestor(thing,workspace.Bases,2) end
+	if thing:IsDescendantOf(workspace.Ships) then return "Ship", module.ascendToChildOfAncestor(thing,workspace.Ships) end
 end
 
 
