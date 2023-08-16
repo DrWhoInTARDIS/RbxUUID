@@ -4,7 +4,6 @@ local TestService = game:GetService("TestService")
 local GuiService = game:GetService("GuiService")
 local Teams = game:GetService("Teams")
 local Players = game:GetService("Players")
-local Types = require(script.Parent.Types)
 local Rando = Random.new()
 local p = "Mainframe:"
 
